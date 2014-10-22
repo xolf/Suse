@@ -146,21 +146,15 @@ function suse_set($var, $val){
 
 
 function suse_start(){
-	global $suse_mysql_connect,$suse_config;
+	global $suse_mysql_connect,$suse_config,$suse_first_visit;
 	$lifetime = time()+$suse_config['lifetime'];
-	if($_COOKIE[$suse_config['cookie_name']] == ''){
+	if(!isset($_COOKIE[$suse_config['cookie_name']])){
 		$hash = md5($_SERVER['REMOTE_ADDR'].time().$_SERVER['REQUEST_TIME_FLOAT']);
 		if($suse_config['enable_lifetime']){
 			setcookie($suse_config['cookie_name'],$hash,$lifetime);
 		}else{
 			setcookie($suse_config['cookie_name'],$hash,999999999999999);
 		}
-	}
-	$query = 'SELECT * 
-			  FROM  `'.$suse_config['prefix'].'id` 
-			  WHERE `hash`= \''.$_COOKIE[$suse_config['cookie_name']].'\'';
-	$result = mysqli_fetch_assoc(mysqli_query($suse_mysql_connect,$query));
-	if($result['id'] == ''){
 		$query = 'INSERT INTO  `'.$suse_config['prefix'].'id` (
 				 `id` ,
 				 `hash` ,
@@ -169,14 +163,19 @@ function suse_start(){
 				 )
 				 VALUES (
 				 NULL ,  
-				 \''.$_COOKIE[$suse_config['cookie_name']].'\',  
+				 \''.$hash.'\',  
 				 \''.$lifetime.'\',  
 				 \'\'
 				 );
 				';
 		mysqli_query($suse_mysql_connect,$query);
+		$suse_first_visit = $hash;
 	}else{
-		$_SESSION = json_decode($result['value'],true);
+	$query = 'SELECT * 
+			  FROM  `'.$suse_config['prefix'].'id` 
+			  WHERE `hash`= \''.$_COOKIE[$suse_config['cookie_name']].'\'';
+	$result = mysqli_fetch_assoc(mysqli_query($suse_mysql_connect,$query));
+	$_SESSION = json_decode($result['value'],true);
 	}
 	if($suse_config['enable_lifetime']){
 		$query = 'DELETE FROM `'.$suse_config['prefix'].'id` 
@@ -190,13 +189,19 @@ function suse_start(){
 
 
 function suse_finish(){
-	global $suse_mysql_connect,$suse_config,$_SUSE;
-	$lifetime = time()+$suse_config['lifetime'];
-	$session_variable = json_encode($_SESSION);
-	$query = 'UPDATE  `id` SET  
-	 		 `expire_time` =  \''.$lifetime.'\',
-			 `value` =  \''.$session_variable.'\' 
-			 WHERE  `hash` = \''.$_COOKIE[$suse_config['cookie_name']].'\';';
+	global $suse_mysql_connect,$suse_config,$suse_first_visit;
+		$lifetime = time()+$suse_config['lifetime'];
+		$session_variable = json_encode($_SESSION);
+	if(isset($suse_first_visit)){
+		$query = 'UPDATE  `id` SET  
+		 		 `expire_time` =  \''.$lifetime.'\',
+				 `value` =  \''.$session_variable.'\' 
+				 WHERE  `hash` = \''.$suse_first_visit.'\';';
+	}else{
+		$query = 'UPDATE  `id` SET  
+		 		 `expire_time` =  \''.$lifetime.'\',
+				 `value` =  \''.$session_variable.'\' 
+				 WHERE  `hash` = \''.$_COOKIE[$suse_config['cookie_name']].'\';';
+	}
 	mysqli_query($suse_mysql_connect,$query);
 }
-error_reporting(E_ALL);
